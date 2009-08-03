@@ -14,73 +14,74 @@ module JDownloader
     attr_accessor :limit
     attr_reader :version, :speed
     include HTTParty
-      
+
     # The ip address of the computer running JDownloader (probably 127.0.0.1)
     def initialize(host = "127.0.0.1",port = 10025)
       self.class.base_uri "http://#{host}:#{port}/"
     end
-    
+
     # Returns the JDownloader version
     def version
       self.class.get("/get/version")
     end
-    
+
     # Returns current download speed
     def speed
       self.class.get("/get/speed").to_i
     end
-    
+
     # Returns the current speed limit (KBps)
     def limit
       self.class.get("/get/speedlimit").to_i
     end
-    
+
     # Sets the download speed limit (KBps)
     def limit=(kBps)
       raise "Requires Integer KBps value" if not kBps.is_a?(Integer)
       self.class.get("/action/set/download/limit/#{kBps}").to_i
     end
-    
+
     # Starts the downloader queue
     def start
       return self.class.get("/action/start") == "Downloads started"
     end
-    
+
     # Stops the downloader queue
     def stop
       return self.class.get("/action/stop") == "Downloads stopped"
     end
-    
+
     # Pauses the downloader queue (how is this different to stop?)
     def pause
       return self.class.get("/action/pause") == "Downloads paused"
     end
-    
+
     # Creates a new package with the given array of links
     def add_link(links)
       links = [links] if links.is_a?(String)
       self.class.get("/action/add/links/grabber0/start1/"+links.join(" "))
     end
-    
+
     alias :add_links :add_link
-    
-    # Will add a DLC to the download queue, pass the DLC or a local file
-    def add_dlc(dlc_or_file)
-      if dlc_or_file.is_a?(String)
-        file = Tempfile.open('dlc') do |f|
-          f.write dlc_or_file
-        end
-        dlc_or_file = file.path
-      else
-        raise "That file does not exist" if not File.exists?(dlc_or_file)
-      end
-      self.class.get("/action/add/container/#{dlc_or_file}")
+
+    # Will add a DLC to the download queue when provided the path to a DLC file
+    def add_dlc(dlc_path)
+      raise "That file does not exist" if not ::File.exists?()dlc_path)
+      self.class.get("/action/add/container/#{dlc_path}")
     end
-    
+
+    # Adds a DLC to the download queue when provided the raw DLC string
+    # TODO: method may be overly naive and in need of a conditional of some sort
+    def add_dlc_raw(dlc_raw)
+      file = Tempfile.open('temp_dlc') do |f|
+      f.write dlc_raw
+      self.class.get("/action/add/container/#{file.path}")
+    end
+
     # Lists the details of any download or downloads (by id) or all downloads.
     def packages(downloadids = nil)
       downloadids = [downloadids] if downloadids.is_a?(Integer)
-      
+
       dls = parse_packages(self.class.get("/get/downloads/alllist"))
       if downloadids.nil?
         return dls
@@ -90,7 +91,7 @@ module JDownloader
     end
     alias :package :packages
     alias :downloads :packages
-    
+
     private
     def parse_packages(string)
       return {} if string.nil?
@@ -123,12 +124,12 @@ module JDownloader
                 #:speed => (file.attributes['file_speed'] == "-1") ? nil : file.attributes['file_speed'].to_i
               })]
             }.flatten]
-            
+
           })]
         }.flatten
       ]
     end
-    
+
     def parse_bytes(bytes)
       case bytes
       when "GB","GB/s"
@@ -143,7 +144,7 @@ module JDownloader
         raise "Unknown unit: #{bytes}"
       end
     end
-    
+
     def parse_status(status)
       case status
       when "[finished]"
@@ -186,7 +187,7 @@ module JDownloader
       end
     end
   end
-  
+
   # JDownloader packages contain files, this class allows interrogation of the files
   class File
     attr_reader :name, :id, :hoster, :status, :completed, :speed, :eta
@@ -200,23 +201,23 @@ module JDownloader
       @speed = f[:status][:speed] if not f[:status][:speed].nil?
       @eta = f[:status][:time] if not f[:status][:time].nil?
     end
-    
+
     # Is the file waiting to be downloaded?
     def waiting?
       @status[:description] == :wait
     end
-    
+
     # Is the file completed?
     def finished?
       @status[:description] == :finished
     end
     alias :completed? :finished?
-    
+
     def inspect
       "#{@name}"
     end
   end
-  
+
   # JDownloader packages can be accessed as objects, they're almost totally intuitive
   class Package
     attr_reader :name, :id, :eta, :speed, :completed, :size, :files, :status
@@ -229,9 +230,10 @@ module JDownloader
       @completed = Percentage.new(p[:completed])
       @files = p[:files]
     end
-    
+
     def inspect
       "#{@completed} of '#{@name}' ETA #{@eta}"
     end
   end
 end
+
